@@ -14,6 +14,17 @@ on:
     paths:
       - terraform/**
 
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Terraform action"
+        required: true
+        default: "apply"
+        type: choice
+        options:
+          - apply
+          - destroy
+
 env:
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -23,7 +34,7 @@ env:
 
 jobs:
   terraform:
-    name: "Apply terraform code changes"
+    name: "Terraform IAC"
     runs-on: ubuntu-latest
 
     defaults:
@@ -54,6 +65,7 @@ jobs:
 
       - name: Terraform plan
         id: plan
+        if: github.event.inputs.action != 'destroy'
         run: terraform plan -no-color -input=false -out planfile
         continue-on-error: true
 
@@ -66,7 +78,12 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve -input=false -parallelism=1 planfile
 
+      - name: Terraform Destroy
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+        run: terraform destroy -auto-approve -input=false
+
       - name: Configure AWS Credentials
+        if: steps.apply.outcome == 'success'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
